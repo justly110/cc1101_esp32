@@ -22,7 +22,7 @@ def validate_project_structure() -> bool:
     print("\nValidating project structure...")
     
     required_files = [
-        "main/softap_sta.c",
+        "main/main.c",
         "main/cc1101_driver.c",
         "main/web_server.c",
         "main/cc1101_driver.h",
@@ -44,19 +44,19 @@ def validate_project_structure() -> bool:
     print("\nChecking for common compilation issues...")
     
     # Check main application file for basic syntax
-    if os.path.exists("main/softap_sta.c"):
-        with open("main/softap_sta.c", "r") as f:
+    if os.path.exists("main/main.c"):
+        with open("main/main.c", "r") as f:
             content = f.read()
             if "#include \"cc1101_driver.h\"" in content:
-                print("  ✓ main/softap_sta.c includes cc1101_driver.h")
+                print("  ✓ main/main.c includes cc1101_driver.h")
             else:
-                print("  ✗ main/softap_sta.c missing cc1101_driver.h include")
+                print("  ✗ main/main.c missing cc1101_driver.h include")
                 all_present = False
                 
             if "#include \"web_server.h\"" in content:
-                print("  ✓ main/softap_sta.c includes web_server.h")
+                print("  ✓ main/main.c includes web_server.h")
             else:
-                print("  ✗ main/softap_sta.c missing web_server.h include")
+                print("  ✗ main/main.c missing web_server.h include")
                 all_present = False
     
     # Check cc1101_driver.c for basic syntax
@@ -134,7 +134,7 @@ def validate_cpp_syntax() -> bool:
     
     # Check for basic syntax issues in main files
     files_to_check = [
-        "main/softap_sta.c",
+        "main/main.c",
         "main/cc1101_driver.c",
         "main/web_server.c"
     ]
@@ -180,7 +180,7 @@ def print_project_info():
     print("\nProject: CC1101 443MHz Signal Manager")
     print("Description: Complete solution for CC1101 RF module control")
     print("\nComponents:")
-    print("  - Main Application: softap_sta.c (WiFi + CC1101 integration)")
+    print("  - Main Application: main.c (WiFi + CC1101 integration)")
     print("  - CC1101 Driver: cc1101_driver.c (SPI communication)")
     print("  - Web Server: web_server.c (REST API + web UI)")
     print("  - Documentation: README.md, PROJECT_SUMMARY.md")

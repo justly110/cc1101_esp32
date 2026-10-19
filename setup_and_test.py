@@ -47,7 +47,7 @@ def check_project_structure() -> bool:
     print("\nChecking project structure...")
     
     required_files = [
-        "main/softap_sta.c",
+        "main/main.c",
         "main/cc1101_driver.c",
         "main/web_server.c",
         "main/cc1101_driver.h",
@@ -197,9 +197,9 @@ def main():
     print("It guides you through the installation process and demonstrates the system capabilities.")
     
     # Check if we're in the right directory
-    if not os.path.exists("main/softap_sta.c"):
+    if not os.path.exists("main/main.c"):
         print("\n✗ This script must be run from the project root directory")
-        print("   Please navigate to: D:/code/softap_sta")
+        print("   Please navigate to: D:/code/cc1101_esp32")
         return 1
     
     # Check ESP-IDF

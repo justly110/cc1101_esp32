@@ -6,7 +6,7 @@ This project implements a complete solution for driving the CC1101 443MHz RF mod
 
 ## Files Created
 
-### 1. Main Application (`main/softap_sta.c`)
+### 1. Main Application (`main/main.c`)
 **Purpose**: Core application that integrates WiFi softAP/station functionality with CC1101 control and web server.
 
 **Key Features**:
@@ -194,7 +194,7 @@ This project implements a complete solution for driving the CC1101 443MHz RF mod
 
 1. **Navigate to project directory**:
    ```bash
-   cd D:/code/softap_sta
+   cd D:/code/cc1101_esp32
    ```
 
 2. **Set target** (if not already configured):

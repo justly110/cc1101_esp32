@@ -40,7 +40,7 @@ The CC1101 443MHz Signal Manager is a complete solution for:
    - Signal file management
    - Real-time status monitoring
 
-3. **Main Application** (`softap_sta.c`)
+3. **Main Application** (`main.c`)
    - WiFi softAP and station configuration
    - CC1101 integration
    - Web server startup
@@ -119,8 +119,8 @@ The project uses standard ESP-IDF components:
 ```bash
 # Clone the project
 cd ~/esp
-project_path="$HOME/esp/softap_sta"
-git clone https://github.com/user/softap_sta.git "$project_path"
+project_path="$HOME/esp/cc1101_esp32"
+git clone https://github.com/user/cc1101_esp32.git "$project_path"
 
 # Install dependencies
 idf.py dep ensure
@@ -133,7 +133,7 @@ idf.py dep ensure
 1. **Navigate to project directory**
 
 ```bash
-cd D:/code/softap_sta
+cd D:/code/cc1101_esp32
 ```
 
 2. **Set target** (if not already configured)

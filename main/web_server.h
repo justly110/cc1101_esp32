@@ -12,7 +12,7 @@ extern "C" {
 
 #define MAX_SIGNAL_DATA_SIZE      (1024 * 1024)  // 1MB max signal data
 #define MAX_WEB_SOCKETS          4              // Maximum concurrent connections
-#define SIGNAL_STORAGE_PATH       "signals"
+#define SIGNAL_STORAGE_PATH       "/spiffs"
 
 typedef struct {
     httpd_handle_t server;
@@ -34,18 +34,26 @@ esp_err_t web_server_start(void);
 void web_server_stop(void);
 bool web_server_is_running(void);
 esp_err_t web_server_save_signal(const uint8_t* data, uint32_t size, const char* filename);
-esp_err_t web_server_load_signal(uint32_t signal_id, signal_data_t* signal_data);
-esp_err_t web_server_delete_signal(uint32_t signal_id);
+esp_err_t web_server_load_signal(const char* filename, signal_data_t* signal_data);
+esp_err_t web_server_delete_signal(const char* filename);
 esp_err_t web_server_list_signals(char* buffer, uint32_t buffer_size);
 
 /* HTTPD URI handlers */
 esp_err_t signal_capture_get_handler(httpd_req_t *req);
+esp_err_t signal_capture_start_handler(httpd_req_t *req);
+esp_err_t signal_capture_stop_handler(httpd_req_t *req);
+esp_err_t signal_scan_start_handler(httpd_req_t *req);
+esp_err_t signal_scan_stop_handler(httpd_req_t *req);
+esp_err_t signal_scan_status_handler(httpd_req_t *req);
+esp_err_t signal_transmit_handler(httpd_req_t *req);
 esp_err_t signal_capture_post_handler(httpd_req_t *req);
 esp_err_t signal_capture_delete_handler(httpd_req_t *req);
 esp_err_t signal_capture_list_get_handler(httpd_req_t *req);
 esp_err_t signal_file_get_handler(httpd_req_t *req);
 esp_err_t web_ui_get_handler(httpd_req_t *req);
 esp_err_t api_status_get_handler(httpd_req_t *req);
+esp_err_t api_frequency_get_handler(httpd_req_t *req);
+esp_err_t api_frequency_set_handler(httpd_req_t *req);
 
 /* Base64 utility functions */
 esp_err_t base64_encode(const uint8_t* data, uint32_t size, char* output, uint32_t* output_size);
