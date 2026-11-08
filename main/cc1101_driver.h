@@ -130,6 +130,45 @@ extern "C" {
 #define CC1101_REG_MCSM1_SETTING     0x00
 #define CC1101_REG_FSMCTRL_SETTING   0x0D
 
+/* MDMCFG2 (0x12) 值（SWRS061 0x12 节）：
+ *   bit7   DEM_DCFILT_OFF = 0  (启用数字 DC 阻断滤波器)
+ *   bit6:4 MOD_FORMAT     = 3  (ASK/OOK；2 是未定义值)
+ *   bit3   MANCHESTER_EN  = 0
+ *   bit2:0 SYNC_MODE      = 0  (无 preamble/sync，直接出原始解调波形)
+ * 旧值 0x20 的 MOD_FORMAT=2 是保留值，芯片不在 OOK 模式。 */
+#define CC1101_MDMCFG2_OOK_ASYNC        0x30
+
+/* IOCFG0 (0x02) 的 GDO0_CFG 字段（SWRS061 Table 41）：
+ *   0x0D = Serial Data Output（RX：解调波形输出）
+ *   0x2E = High impedance / 3-state（TX：引脚交给 MCU 驱动）
+ *
+ * 异步串行 TX 时 GDO0 是数据输入端（SWRS061 27.1 节：
+ * "In TX, the GDO0 pin is used for data input"）。把 GDO0_CFG 设成 0x2E
+ * 让芯片释放引脚，由 MCU 以推挽输出驱动它。 */
+#define CC1101_IOCFG0_SERIAL_OUT        0x0D
+#define CC1101_IOCFG0_HIGH_IMPEDANCE    0x2E
+
+/* PKTCTRL0 value for OOK/ASK asynchronous serial mode (SWRS061 表 0x08):
+ *   bit7   reserved      = 0
+ *   bit6   WHITE_DATA    = 0  (no data whitening)
+ *   bit5:4 PKT_FORMAT    = 3  (asynchronous serial: GDO0 上直接是解调波形)
+ *   bit3   reserved      = 0
+ *   bit2   CRC_EN        = 0
+ *   bit1:0 LENGTH_CONFIG = 2  (infinite packet length)
+ * 旧值 0x0E 的 PKT_FORMAT=0 是普通 FIFO 模式，GDO0 不会有解调波形。 */
+#define CC1101_PKTCTRL0_ASYNC_SERIAL    0x32
+
+/* FREND0 保持 SmartRF Studio 常见的 OOK 值 0x11（PA_POWER=1）。
+ * 数据手册 0x22 节：OOK/ASK 下逻辑 1 用 PATABLE[PA_POWER]，
+ * 逻辑 0 固定用 PATABLE[0]，所以 PATABLE[0] 必须是"关"。 */
+#define CC1101_FREND0_TX                0x11
+
+/* PATABLE 表项。0xC6 是芯片复位默认值，四个频段均在 +7~+8.5 dBm
+ * （SWRS061 Table 39）；旧注释说 0x60 约 +10 dBm 是错的，0x60 在
+ * 433 MHz 只有 0 dBm。 */
+#define CC1101_PATABLE_OOK_ON           0xC6
+#define CC1101_PATABLE_OOK_OFF          0x00
+
 /* CC1101 Configuration (frequency is selectable at runtime) */
 #define CC1101_FREQUENCY_BASE       443000000.0
 #define CC1101_CHANNEL_SPACE        500000.0

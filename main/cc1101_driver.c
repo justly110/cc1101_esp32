@@ -315,6 +315,29 @@ static esp_err_t cc1101_program_frequency_registers(void)
     return ret;
 }
 
+/* PATABLE 是 8 字节表，index 0 之后的表项必须用 burst 访问才能写入
+ * （SWRS061 10.6 节：单字节写只会命中 index 0）。
+ * OOK/ASK 下逻辑 1 用 PATABLE[FREND0.PA_POWER]，逻辑 0 固定用 PATABLE[0]，
+ * 所以这里写 [0]=关、[1]=开，与 FREND0.PA_POWER=1 配套。
+ * 其余表项填 0（关），避免残留的复位值在 PA ramp 时意外抬高功率。 */
+static esp_err_t cc1101_write_patable_ook(void)
+{
+    uint8_t cmd[1 + 8];
+    cmd[0] = CC1101_SPI_WRITE_BURST | CC1101_REG_PATABLE;
+    cmd[1] = CC1101_PATABLE_OOK_OFF;   /* index 0：逻辑 0 */
+    cmd[2] = CC1101_PATABLE_OOK_ON;    /* index 1：逻辑 1（= FREND0.PA_POWER） */
+    memset(&cmd[3], 0, 6);
+
+    if (spi_mutex == NULL || spi_handle == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    xSemaphoreTake(spi_mutex, portMAX_DELAY);
+    esp_err_t ret = cc1101_spi_transaction(CC1101_SPI_WRITE_SINGLE, cmd, sizeof(cmd), NULL, 0, 100);
+    xSemaphoreGive(spi_mutex);
+    return ret;
+}
+
 esp_err_t cc1101_write_config(const cc1101_config_t* config) {
     esp_err_t ret;
     
@@ -342,25 +365,27 @@ esp_err_t cc1101_write_config(const cc1101_config_t* config) {
     if (ret != ESP_OK) return ret;
     
     /* --- Modem: OOK/ASK, no preamble/sync (raw capture), 4.8 kBaud ---
-     * MDMCFG4: CHANBW_E=2, CHANBW_M=4 (BW ~101 kHz), DRATE_E=7
+     * MDMCFG4: CHANBW_E=2, CHANBW_M=2 (BW ~135 kHz), DRATE_E=7
      * MDMCFG3: DRATE_M=0x83 -> 4.8 kBaud
-     * MDMCFG2: MOD_FORMAT=ASK/OOK, SYNC_MODE=no preamble/sync
+     * MDMCFG2: MOD_FORMAT=ASK/OOK(3), SYNC_MODE=no preamble/sync
      */
     ret = cc1101_write_register(CC1101_REG_MDMCFG4, 0xA7);
     if (ret != ESP_OK) return ret;
     ret = cc1101_write_register(CC1101_REG_MDMCFG3, 0x83);
     if (ret != ESP_OK) return ret;
-    ret = cc1101_write_register(CC1101_REG_MDMCFG2, 0x20);
+    ret = cc1101_write_register(CC1101_REG_MDMCFG2, CC1101_MDMCFG2_OOK_ASYNC);
     if (ret != ESP_OK) return ret;
     ret = cc1101_write_register(CC1101_REG_MDMCFG1, 0x22);
     if (ret != ESP_OK) return ret;
     ret = cc1101_write_register(CC1101_REG_MDMCFG0, 0xF8);
     if (ret != ESP_OK) return ret;
     
-    /* --- Packet: asynchronous serial mode (raw demodulated data on GDO0) --- */
+    /* --- Packet: asynchronous serial mode (raw demodulated data on GDO0) ---
+     * PKT_FORMAT=3 + LENGTH_CONFIG=infinite -> 0x32。
+     * 旧值 0x0E 的 PKT_FORMAT=0（FIFO 模式），GDO0 上不会有解调波形。 */
     ret = cc1101_write_register(CC1101_REG_PKTCTRL1, 0x04);
     if (ret != ESP_OK) return ret;
-    ret = cc1101_write_register(CC1101_REG_PKTCTRL0, 0x0E);
+    ret = cc1101_write_register(CC1101_REG_PKTCTRL0, CC1101_PKTCTRL0_ASYNC_SERIAL);
     if (ret != ESP_OK) return ret;
     ret = cc1101_write_register(CC1101_REG_FIFOTHR, 0x47);
     if (ret != ESP_OK) return ret;
@@ -368,7 +393,7 @@ esp_err_t cc1101_write_config(const cc1101_config_t* config) {
     /* --- GDO --- */
     ret = cc1101_write_register(CC1101_REG_IOCFG2, 0x0D);  /* GDO2: FIFO threshold */
     if (ret != ESP_OK) return ret;
-    ret = cc1101_write_register(CC1101_REG_IOCFG0, 0x0D);  /* GDO0: serial data output */
+    ret = cc1101_write_register(CC1101_REG_IOCFG0, CC1101_IOCFG0_SERIAL_OUT);  /* GDO0: 解调波形输出 */
     if (ret != ESP_OK) return ret;
     
     /* --- Frequency synthesizer / AGC / frontend --- */
@@ -384,7 +409,8 @@ esp_err_t cc1101_write_config(const cc1101_config_t* config) {
     if (ret != ESP_OK) return ret;
     ret = cc1101_write_register(CC1101_REG_FREND1, 0xB6);
     if (ret != ESP_OK) return ret;
-    ret = cc1101_write_register(CC1101_REG_FREND0, 0x11);  /* OOK PA power index */
+    /* FREND0.PA_POWER=1 与下方 PATABLE[1] 配套；不再用单字节写 PATABLE。 */
+    ret = cc1101_write_register(CC1101_REG_FREND0, CC1101_FREND0_TX);
     if (ret != ESP_OK) return ret;
     
     /* --- State machine --- */
@@ -403,8 +429,8 @@ esp_err_t cc1101_write_config(const cc1101_config_t* config) {
     ret = cc1101_write_register(CC1101_REG_FSCAL0, 0x0D);
     if (ret != ESP_OK) return ret;
     
-    /* --- PA table: index 0 ~+10 dBm (used for TX later) --- */
-    ret = cc1101_write_register(CC1101_REG_PATABLE, 0x60);
+    /* --- PA table: OOK 需要成对的表项 --- */
+    ret = cc1101_write_patable_ook();
     if (ret != ESP_OK) return ret;
     
     /* Flush FIFOs and calibrate */
@@ -534,11 +560,27 @@ void cc1101_acquisition_task(void* arg) {
         uint8_t fifo_count_reg = 0;
         esp_err_t ret = cc1101_read_register(CC1101_REG_RXBYTES, &fifo_count_reg);
         if (ret == ESP_OK) {
-            /* RXBYTES bit7 is overflow flag; mask it out */
-            fifo_count = (uint32_t)(fifo_count_reg & 0x7F);
+            /* RXBYTES: bit6:0 = 已收字节数, bit7 = FIFO_OVERFLOW。
+             * 溢出说明有数据丢失，丢弃本批以免把错位数据当成信号。 */
+            if (fifo_count_reg & 0x80) {
+                ESP_LOGW(TAG, "RX FIFO overflow, flushing");
+                uint8_t sfrx = CC1101_STROBE_SFRX;
+                cc1101_spi_transaction(0, &sfrx, 1, NULL, 0, 100);
+                fifo_count = 0;
+            } else {
+                fifo_count = (uint32_t)(fifo_count_reg & 0x7F);
+            }
         }
-        
+
         if (fifo_count > 0) {
+            /* 不要写超过缓冲区剩余空间：FIFO 一次最多返回 64 字节。 */
+            uint32_t space = signal->size - samples_collected;
+            if (fifo_count > space) {
+                fifo_count = space;
+            }
+            if (fifo_count == 0) {
+                break;
+            }
             ret = cc1101_read_fifo(signal->buffer + samples_collected, &fifo_count);
             if (ret == ESP_OK) {
                 samples_collected += fifo_count;
@@ -956,9 +998,9 @@ esp_err_t cc1101_scan_start(void)
     cc1101_spi_transaction(0, &scal, 1, NULL, 0, 100);
     vTaskDelay(10 / portTICK_PERIOD_MS);
 
-    cc1101_write_register(CC1101_REG_PKTCTRL0, 0x0E);
-    cc1101_write_register(CC1101_REG_IOCFG0, 0x0D);
-    cc1101_write_register(CC1101_REG_MDMCFG2, 0x20);
+    cc1101_write_register(CC1101_REG_PKTCTRL0, CC1101_PKTCTRL0_ASYNC_SERIAL);
+    cc1101_write_register(CC1101_REG_IOCFG0, CC1101_IOCFG0_SERIAL_OUT);
+    cc1101_write_register(CC1101_REG_MDMCFG2, CC1101_MDMCFG2_OOK_ASYNC);
 
     /* Arm edge detection but keep interrupts disabled until a carrier appears */
     gpio_set_intr_type(CC1101_IRQ_GPIO, GPIO_INTR_ANYEDGE);
@@ -1059,9 +1101,10 @@ esp_err_t cc1101_transmit_pulses(const uint16_t* pulses, uint32_t count)
     cc1101_spi_transaction(0, &scal, 1, NULL, 0, 100);
     vTaskDelay(10 / portTICK_PERIOD_MS);
 
-    cc1101_write_register(CC1101_REG_PKTCTRL0, 0x0E);
-    cc1101_write_register(CC1101_REG_MDMCFG2, 0x20);
-    cc1101_write_register(CC1101_REG_IOCFG0, 0x2E);
+    cc1101_write_register(CC1101_REG_PKTCTRL0, CC1101_PKTCTRL0_ASYNC_SERIAL);
+    cc1101_write_register(CC1101_REG_MDMCFG2, CC1101_MDMCFG2_OOK_ASYNC);
+    /* GDO0 交给 MCU 驱动：异步串行 TX 下它是数据输入端 */
+    cc1101_write_register(CC1101_REG_IOCFG0, CC1101_IOCFG0_HIGH_IMPEDANCE);
 
     uint8_t sftx = CC1101_STROBE_SFTX;
     cc1101_spi_transaction(0, &sftx, 1, NULL, 0, 100);
@@ -1085,7 +1128,7 @@ esp_err_t cc1101_transmit_pulses(const uint16_t* pulses, uint32_t count)
     cc1101_spi_transaction(0, &sidle, 1, NULL, 0, 100);
 
     gpio_set_direction(CC1101_IRQ_GPIO, GPIO_MODE_INPUT);
-    cc1101_write_register(CC1101_REG_IOCFG0, 0x0D);
+    cc1101_write_register(CC1101_REG_IOCFG0, CC1101_IOCFG0_SERIAL_OUT);
 
     ESP_LOGI(TAG, "Transmitted %lu pulses", (unsigned long)count);
     return ESP_OK;
